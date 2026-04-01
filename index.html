@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earn Stream TMA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        @keyframes rocket-fly {
+            0% { transform: translateY(0) rotate(0); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+            100% { transform: translateY(0) rotate(0); }
+        }
+        .rocket-anim { animation: rocket-fly 3s infinite ease-in-out; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-white select-none overflow-x-hidden">
+
+    <div class="p-6 bg-gradient-to-br from-yellow-400 via-orange-500 to-red-600 rounded-b-[40px] shadow-2xl mb-6">
+        <div class="flex justify-between items-center">
+            <div>
+                <p class="text-xs font-bold opacity-80 tracking-widest uppercase">Available Balance</p>
+                <h1 class="text-4xl font-black mt-1 flex items-center gap-2">
+                    💰 <span id="balance">0</span>
+                </h1>
+            </div>
+            <div class="rocket-anim text-5xl">🚀</div>
+        </div>
+    </div>
+
+    <div class="px-5 space-y-6 pb-28">
+
+        <div class="glass p-5 rounded-3xl border border-white/10 shadow-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold flex items-center gap-2">📅 Daily Check-in</h2>
+                <span id="checkinStatus" class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">Ready</span>
+            </div>
+            <button onclick="claimDaily()" id="checkinBtn" class="w-full py-4 bg-white text-black font-black rounded-2xl active:scale-95 transition-all shadow-lg shadow-white/10">
+                Collect 500 Coins 🎁
+            </button>
+        </div>
+
+        <div>
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📺 Watch & Earn <span class="text-xs font-normal text-slate-400">(20/Day)</span></h2>
+            <div class="glass p-5 rounded-3xl border border-white/10 relative overflow-hidden">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <p class="font-bold text-lg">Rewarded Video</p>
+                        <p class="text-xs text-slate-400" id="adProgress">Progress: 0/20 Ads</p>
+                    </div>
+                    <button onclick="handleWatchAd()" id="adBtn" class="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 rounded-2xl font-bold active:scale-95 transition-all">
+                        Watch Now
+                    </button>
+                </div>
+                <div id="cooldownOverlay" class="hidden absolute inset-0 bg-black/80 flex flex-center items-center justify-center text-center p-4">
+                    <p class="text-sm font-bold text-orange-400">⏳ Cooldown Active! <br> Wait <span id="timer">60:00</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-xl font-bold mb-4">🔗 Extra Rewards</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div onclick="openLink('https://cpagrip.com/your-link')" class="glass p-4 rounded-3xl text-center border border-white/5 active:bg-white/10">
+                    <span class="text-3xl">🛡️</span>
+                    <p class="text-sm font-bold mt-2">Content Locker</p>
+                </div>
+                <div onclick="openLink('https://directlink.com/your-link')" class="glass p-4 rounded-3xl text-center border border-white/5 active:bg-white/10">
+                    <span class="text-3xl">⚡</span>
+                    <p class="text-sm font-bold mt-2">Direct Ads</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass p-5 rounded-3xl border border-white/10">
+            <h2 class="text-lg font-bold mb-4">🏆 Top Earners</h2>
+            <div class="space-y-3" id="leaderboard">
+                <div class="flex justify-between items-center text-sm">
+                    <span>🥇 <b>User_99</b></span>
+                    <span class="text-yellow-500">50,000 💰</span>
+                </div>
+                <div class="flex justify-between items-center text-sm opacity-80">
+                    <span>🥈 <b>Ali_Khan</b></span>
+                    <span>42,500 💰</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 p-4 bg-[#0f172a]/80 backdrop-blur-md border-t border-white/10 flex justify-around text-[10px] font-bold uppercase tracking-widest">
+        <div class="text-blue-400 flex flex-col items-center gap-1"><span>🏠</span> Home</div>
+        <div class="opacity-50 flex flex-col items-center gap-1"><span>👥</span> Referral</div>
+        <div class="opacity-50 flex flex-col items-center gap-1"><span>💳</span> Withdraw</div>
+    </div>
+
+    <script>
+        // Initialize Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // App Logic State
+        let balance = localStorage.getItem('balance') || 0;
+        let adsWatched = localStorage.getItem('adsWatched') || 0;
+        let lastAdTime = localStorage.getItem('lastAdTime') || 0;
+        let lastCheckIn = localStorage.getItem('lastCheckIn') || "";
+
+        const AD_LIMIT = 20;
+        const COOLDOWN_MINUTES = 60;
+
+        function updateUI() {
+            document.getElementById('balance').innerText = parseInt(balance).toLocaleString();
+            document.getElementById('adProgress').innerText = `Progress: ${adsWatched}/20 Ads`;
+            
+            // Check Daily Reset
+            const today = new Date().toLocaleDateString();
+            if(localStorage.getItem('lastResetDate') !== today) {
+                adsWatched = 0;
+                localStorage.setItem('adsWatched', 0);
+                localStorage.setItem('lastResetDate', today);
+            }
+        }
+
+        // Cash Animation (Confetti)
+        function triggerCashAnim() {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#22c55e', '#ffffff', '#eab308']
+            });
+        }
+
+        // Daily Check-in
+        function claimDaily() {
+            const today = new Date().toLocaleDateString();
+            if (lastCheckIn === today) {
+                tg.showAlert("❌ You already claimed today's reward!");
+                return;
+            }
+            balance = parseInt(balance) + 500;
+            lastCheckIn = today;
+            localStorage.setItem('balance', balance);
+            localStorage.setItem('lastCheckIn', today);
+            tg.HapticFeedback.notificationOccurred('success');
+            triggerCashAnim();
+            updateUI();
+            document.getElementById('checkinBtn').innerText = "Claimed ✅";
+            document.getElementById('checkinBtn').classList.add('opacity-50');
+        }
+
+        // Ad Handling with Cooldown
+        function handleWatchAd() {
+            const now = Date.now();
+            
+            if (adsWatched >= AD_LIMIT) {
+                tg.showPopup({ title: 'Limit Reached', message: 'You have watched all 20 ads. Come back tomorrow! 🕛' });
+                return;
+            }
+
+            // Cooldown logic: Every 5 ads
+            if (adsWatched > 0 && adsWatched % 5 === 0) {
+                const elapsed = (now - lastAdTime) / 1000 / 60;
+                if (elapsed < COOLDOWN_MINUTES) {
+                    tg.HapticFeedback.notificationOccurred('warning');
+                    document.getElementById('cooldownOverlay').classList.remove('hidden');
+                    return;
+                }
+            }
+
+            // INTEGRATE ADSGRAM HERE
+            // Simulated Ad Success
+            tg.showConfirm("Watch Ad to earn 100 coins?", (ok) => {
+                if(ok) {
+                    adsWatched++;
+                    balance = parseInt(balance) + 100;
+                    lastAdTime = Date.now();
+                    
+                    localStorage.setItem('balance', balance);
+                    localStorage.setItem('adsWatched', adsWatched);
+                    localStorage.setItem('lastAdTime', lastAdTime);
+                    
+                    triggerCashAnim();
+                    tg.HapticFeedback.impactOccurred('medium');
+                    updateUI();
+                }
+            });
+        }
+
+        function openLink(url) {
+            tg.HapticFeedback.impactOccurred('light');
+            tg.openLink(url);
+        }
+
+        // Run on load
+        updateUI();
+    </script>
+</body>
+</html>
